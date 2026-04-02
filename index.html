@@ -96,7 +96,7 @@
 
                 if (!response.ok) {
                     const errorData = await response.json().catch(() => ({}));
-                    throw new Error(errorData.detail || '伺服器處理失敗，請檢查網址是否正確。');
+                    throw new Error(errorData.detail || `伺服器連線中斷 (狀態碼 ${response.status})。若伺服器剛從休眠中喚醒，請等待 10 秒後再點擊一次下載！`);
                 }
 
                 // 處理檔案下載
