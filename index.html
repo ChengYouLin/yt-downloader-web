@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>個人 YouTube 轉 MP3 工具</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { font-family: 'PingFang TC', 'Microsoft JhengHei', sans-serif; }
+        .bg-gradient { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
+
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
+        <div class="bg-gradient p-6 text-center">
+            <h1 class="text-3xl font-bold text-white mb-2"><i class="fab fa-youtube mr-2"></i>YT 轉 MP3</h1>
+            <p class="text-gray-200 text-sm">輸入 YouTube 網址，輕鬆轉換為音樂檔</p>
+        </div>
+        
+        <div class="p-6 text-gray-700">
+            <div class="mb-5">
+                <label for="youtubeUrl" class="block text-sm font-medium text-gray-700 mb-2">YouTube 網址</label>
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <i class="fas fa-link text-gray-400"></i>
+                    </div>
+                    <input type="text" id="youtubeUrl" class="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-colors" placeholder="https://www.youtube.com/watch?v=..." autocomplete="off">
+                </div>
+            </div>
+
+            <button id="downloadBtn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 px-4 rounded-lg transition-colors flex items-center justify-center">
+                <i class="fas fa-download mr-2"></i> 開始轉換並下載
+            </button>
+
+            <!-- 狀態提示區 -->
+            <div id="statusArea" class="mt-6 hidden">
+                <div id="loadingIndicator" class="flex flex-col items-center justify-center text-indigo-600">
+                    <i class="fas fa-circle-notch fa-spin fa-2x mb-2"></i>
+                    <p class="text-sm font-medium mt-2">伺服器正在下載與轉檔中...</p>
+                    <p class="text-xs text-indigo-400 mt-1">(Render 免費伺服器若剛喚醒，第一次可能需等待 40~60 秒，請耐心等候)</p>
+                </div>
+                <div id="errorMessage" class="bg-red-50 text-red-600 p-4 rounded-lg text-sm hidden flex items-center">
+                    <i class="fas fa-exclamation-circle mr-2"></i>
+                    <span id="errorText">發生錯誤，請檢查網址或稍後再試。</span>
+                </div>
+                <div id="successMessage" class="bg-green-50 text-green-600 p-4 rounded-lg text-sm hidden flex flex-col items-center">
+                    <i class="fas fa-check-circle fa-2x mb-2"></i>
+                    <span class="mt-2">轉換成功！即將開始下載。</span>
+                </div>
+            </div>
+            
+            <p class="mt-6 text-xs text-center text-gray-400">
+                僅供個人學習與測試使用，請遵守版權規範。
+            </p>
+        </div>
+    </div>
+
+    <script>
+        const downloadBtn = document.getElementById('downloadBtn');
+        const youtubeUrlInput = document.getElementById('youtubeUrl');
+        const statusArea = document.getElementById('statusArea');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        const errorMessage = document.getElementById('errorMessage');
+        const errorText = document.getElementById('errorText');
+        const successMessage = document.getElementById('successMessage');
+
+        // 這裡已經換成您專屬的 Render 後端網址了！
+        const BACKEND_API_URL = 'https://yt-mp3-backend-sgtk.onrender.com/download'; 
+
+        downloadBtn.addEventListener('click', async () => {
+            const url = youtubeUrlInput.value.trim();
+            
+            if (!url) {
+                showError('請輸入有效的 YouTube 網址！');
+                return;
+            }
+
+            // 重置 UI 狀態
+            statusArea.classList.remove('hidden');
+            loadingIndicator.classList.remove('hidden');
+            errorMessage.classList.add('hidden');
+            successMessage.classList.add('hidden');
+            downloadBtn.disabled = true;
+            downloadBtn.classList.add('opacity-50', 'cursor-not-allowed');
+
+            try {
+                const response = await fetch(BACKEND_API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ url: url })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.detail || '伺服器處理失敗，請檢查網址是否正確。');
+                }
+
+                // 處理檔案下載
+                const blob = await response.blob();
+                
+                // 嘗試從 Header 獲取檔名，如果沒有則使用預設名稱
+                let filename = "download.mp3";
+                const disposition = response.headers.get('Content-Disposition');
+                if (disposition && disposition.indexOf('attachment') !== -1) {
+                    const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+                    const matches = filenameRegex.exec(disposition);
+                    if (matches != null && matches[1]) { 
+                        // 解碼 URL 編碼的檔名
+                        filename = decodeURIComponent(matches[1].replace(/['"]/g, ''));
+                    }
+                }
+
+                // 建立暫時的下載連結並觸發點擊
+                const downloadUrl = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = downloadUrl;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(downloadUrl);
+
+                showSuccess();
+
+            } catch (error) {
+                showError(error.message);
+            } finally {
+                downloadBtn.disabled = false;
+                downloadBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        });
+
+        function showError(msg) {
+            loadingIndicator.classList.add('hidden');
+            successMessage.classList.add('hidden');
+            errorMessage.classList.remove('hidden');
+            errorText.textContent = msg;
+        }
+
+        function showSuccess() {
+            loadingIndicator.classList.add('hidden');
+            errorMessage.classList.add('hidden');
+            successMessage.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
